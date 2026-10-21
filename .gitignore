@@ -1,0 +1,11 @@
+*.o
+*.ko
+*.ko.*
+*.mod
+*.mod.c
+.*.cmd
+Module.symvers
+modules.order
+.tmp_versions/
+*.wav
+*.raw
