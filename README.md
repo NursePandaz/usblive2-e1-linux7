@@ -6,20 +6,22 @@ analog video capture device, based on
 
 ## Current status
 
-**Video driver binding and buffer streaming work. Complete capture and OBS
-operation are not yet validated. Live-source testing is in progress.**
+**Version 1.2 is confirmed working in OBS: full-height S-Video video without
+the green edge, and audible player audio. Longer recordings, synchronization
+and standalone ALSA startup still need validation.**
 
 | Check | Result |
 | --- | --- |
 | Build and DKMS installation | Passed on kernel `7.0.0-38-generic` |
 | USB `2040:c220` binding | Bound to `em28xx` |
-| V4L2 devices | `/dev/video4`, `/dev/vbi0`, `/dev/media2` on the test machine |
+| V4L2 devices | `/dev/video4` and `/dev/media2`; E1 raw VBI is disabled in version 1.2 |
 | Composite streaming | 300 frames at approximately 29.97 fps |
 | S-Video streaming | 150 frames at approximately 30 fps |
 | Stop/start and input switching | Passed brief tests |
-| Live S-Video signal | Locked; large green band fixed in version 1.1; one bottom scanline still blank |
-| USB audio | Enumerated, but capture returned I/O errors |
-| OBS recording and audio/video sync | Pending |
+| Live S-Video signal | Locked; large green band fixed in version 1.2; remaining scanline fixed by the E1 raw-VBI quirk |
+| USB audio | Confirmed audible in OBS; eight-second source recording passed; standalone ALSA startup remains problematic |
+| OBS preview and audio | User confirmed the green line is gone and audio works after reopening OBS |
+| Long recordings and audio/video sync | Not yet validated |
 
 Device numbers can change. Select the Hauppauge by name or its stable
 `/dev/v4l/by-id/` link rather than assuming `/dev/video4`.
@@ -37,14 +39,19 @@ Device numbers can change. Select the Hauppauge by name or its stable
 This targets E1 hardware with an EM2828X built-in decoder. Other USB-Live2
 revisions and kernels have not been validated by this work.
 
-## Version 1.1: green-band fix
+## Version 1.2: green-band fix
 
 The inherited standard-query handler returned every supported standard when
 the built-in decoder had no detection implementation. Capture programs then
 selected that mixed mask, causing PAL scaling with NTSC decoder timing. The
 second DKMS patch returns ENOTTY for unsupported detection and rejects mixed
 525/625-line masks. Live capture now retains NTSC-M and the large green band
-is gone. One bottom scanline remains blank. Audio is still under investigation.
+is gone. The remaining empty bottom scanline is eliminated by disabling raw VBI
+only for this E1 board. This also removes its raw VBI device/closed-caption
+capture path; other boards are unchanged. The user confirmed audio works in
+OBS after their adjustments, and an eight-second capture from the same audio
+source completed successfully. Direct ALSA startup and restart reliability
+still need testing; no speculative audio driver patch was added.
 
 ## Why the original build failed
 
@@ -70,7 +77,7 @@ not work because the patch added them back during every build.
 Only the configured core, video/VBI and ALSA modules were built. DVB and
 remote-control code were not enabled or validated. See [the build and locking
 review](LINUX-7.0.md), [initial runtime results](CAPTURE-TEST-RESULTS.md),
-and [the version 1.1 investigation](RUNTIME-FIX.md).
+and [the version 1.2 investigation](RUNTIME-FIX.md).
 
 ## Build
 
@@ -79,21 +86,22 @@ The tested compiler was `x86_64-linux-gnu-gcc-13`.
 
 **Keep the repository and `/usr/src` source unpatched.** DKMS applies
 `patches/USBLive2_Empia.patch`, then
-`patches/0002-e1-standard-query.patch` during source preparation. A direct `make` on
+`patches/0002-e1-standard-query.patch`, then
+`patches/0003-e1-disable-raw-vbi.patch` during source preparation. A direct `make` on
 unpatched source does not include E1 support.
 
 To build through DKMS, first copy this source into
-`/usr/src/em28xx-dkms-1.1`, backing up any existing directory. Include the
+`/usr/src/em28xx-dkms-1.2`, backing up any existing directory. Include the
 Makefile, `dkms.conf`, `em28xx/` and `patches/` directories.
 
 For a fresh registration:
 
 ```bash
-sudo dkms add -m em28xx-dkms -v 1.1
-sudo dkms build -m em28xx-dkms -v 1.1 -k "$(uname -r)"
+sudo dkms add -m em28xx-dkms -v 1.2
+sudo dkms build -m em28xx-dkms -v 1.2 -k "$(uname -r)"
 ```
 
-If `em28xx-dkms/1.1` is already registered, inspect `dkms status` and its source
+If `em28xx-dkms/1.2` is already registered, inspect `dkms status` and its source
 link first; do not add it again or replace an installed build blindly.
 
 Builds passed MODPOST against the running kernel's symbol versions. Missing
@@ -106,7 +114,7 @@ previous source, and close capture applications first. Do not unload shared
 USB audio, webcam or NVIDIA drivers.
 
 ```bash
-sudo dkms install -m em28xx-dkms -v 1.1 -k "$(uname -r)"
+sudo dkms install -m em28xx-dkms -v 1.2 -k "$(uname -r)"
 modinfo -n em28xx
 sudo modprobe em28xx
 sudo modprobe em28xx-v4l
@@ -141,9 +149,9 @@ Capture (PulseAudio)** source and use **48 kHz stereo**. Avoid duplicate audio
 paths. S-Video needs separate red/white audio cables.
 
 These are starting settings, not a claim of successful end-to-end capture.
-Audio currently fails direct ALSA recording, including with video streaming.
-It must be investigated with a playing source before OBS audio can be marked
-working. Standard autodetection is deliberately unsupported by version 1.1;
+Audio is confirmed working in the current OBS session. Direct ALSA startup
+previously returned I/O errors, so standalone capture and repeated starts are
+not yet validated. Standard autodetection is deliberately unsupported by version 1.2;
 select the actual NTSC/PAL standard explicitly.
 
 [OBS video capture documentation](https://obsproject.com/kb/video-capture-sources)
@@ -161,7 +169,7 @@ select the actual NTSC/PAL standard explicitly.
 Close capture applications, then uninstall only this package for the target kernel:
 
 ```bash
-sudo dkms uninstall -m em28xx-dkms -v 1.1 -k "$(uname -r)"
+sudo dkms uninstall -m em28xx-dkms -v 1.2 -k "$(uname -r)"
 ```
 
 If necessary, unload only unused em28xx modules in dependency order and restore

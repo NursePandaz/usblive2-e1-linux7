@@ -1,0 +1,28 @@
+--- a/em28xx/em28xx-video.c
++++ b/em28xx/em28xx-video.c
+@@ -158,6 +158,14 @@
+ 	if (dev->is_webcam)
+ 		return 0;
+ 
++	/* The E1 integrated decoder loses the final NTSC video line with
++	 * generic raw-VBI capture and its VSTART=2 offset enabled. Keep
++	 * full-frame video; raw VBI on this board needs separate validation.
++	 * Other boards retain their existing VBI support.
++	 */
++	if (dev->model == EM2828X_BOARD_HAUPPAUGE_USB_LIVE2)
++		return 0;
++
+ 	/* FIXME: check subdevices for VBI support */
+ 
+ 	if (dev->chip_id == CHIP_ID_EM2860 ||
+@@ -1252,6 +1260,10 @@
+ 	if (rc < 0)
+ 		return rc;
+ 
++	/* There is no VBI video_device (or queue lock) on these boards. */
++	if (!em28xx_vbi_supported(dev))
++		return 0;
++
+ 	/* Setup Videobuf2 for VBI capture */
+ 	q = &v4l2->vb_vbiq;
+ 	q->type = V4L2_BUF_TYPE_VBI_CAPTURE;
