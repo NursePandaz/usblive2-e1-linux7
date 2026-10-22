@@ -1,0 +1,29 @@
+--- a/em28xx/em28xx-video.c
++++ b/em28xx/em28xx-video.c
+@@ -1591,6 +1591,14 @@
+ {
+ 	struct em28xx *dev = video_drvdata(file);
+ 
++	/* The integrated decoder has no querystd subdevice. Leaving the
++	 * caller's V4L2_STD_ALL mask unchanged falsely claims detection and
++	 * lets applications program conflicting 525/625-line geometry.
++	 * Require explicit standard selection until detection is implemented.
++	 */
++	if (dev->board.decoder == EM28XX_BUILTIN)
++		return -ENOTTY;
++
+ 	v4l2_device_call_all(&dev->v4l2->v4l2_dev, 0, video, querystd, norm);
+ 
+ 	return 0;
+@@ -1601,6 +1609,11 @@
+ 	struct em28xx      *dev  = video_drvdata(file);
+ 	struct em28xx_v4l2 *v4l2 = dev->v4l2;
+ 	struct v4l2_format f;
++
++	/* Never combine PAL-sized capture with NTSC decoder programming. */
++	if (dev->board.decoder == EM28XX_BUILTIN &&
++	    (norm & V4L2_STD_525_60) && (norm & V4L2_STD_625_50))
++		return -EINVAL;
+ 
+ 	if (norm == v4l2->norm)
+ 		return 0;

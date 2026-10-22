@@ -7,7 +7,7 @@ analog video capture device, based on
 ## Current status
 
 **Video driver binding and buffer streaming work. Complete capture and OBS
-operation are not yet validated. Testing is paused pending source hardware.**
+operation are not yet validated. Live-source testing is in progress.**
 
 | Check | Result |
 | --- | --- |
@@ -17,7 +17,7 @@ operation are not yet validated. Testing is paused pending source hardware.**
 | Composite streaming | 300 frames at approximately 29.97 fps |
 | S-Video streaming | 150 frames at approximately 30 fps |
 | Stop/start and input switching | Passed brief tests |
-| Picture quality and actual signal | Pending; no source was playing |
+| Live S-Video signal | Locked; large green band fixed in version 1.1; one bottom scanline still blank |
 | USB audio | Enumerated, but capture returned I/O errors |
 | OBS recording and audio/video sync | Pending |
 
@@ -36,6 +36,15 @@ Device numbers can change. Select the Hauppauge by name or its stable
 
 This targets E1 hardware with an EM2828X built-in decoder. Other USB-Live2
 revisions and kernels have not been validated by this work.
+
+## Version 1.1: green-band fix
+
+The inherited standard-query handler returned every supported standard when
+the built-in decoder had no detection implementation. Capture programs then
+selected that mixed mask, causing PAL scaling with NTSC decoder timing. The
+second DKMS patch returns ENOTTY for unsupported detection and rejects mixed
+525/625-line masks. Live capture now retains NTSC-M and the large green band
+is gone. One bottom scanline remains blank. Audio is still under investigation.
 
 ## Why the original build failed
 
@@ -60,7 +69,8 @@ not work because the patch added them back during every build.
 
 Only the configured core, video/VBI and ALSA modules were built. DVB and
 remote-control code were not enabled or validated. See [the build and locking
-review](LINUX-7.0.md) and [runtime results](CAPTURE-TEST-RESULTS.md).
+review](LINUX-7.0.md), [initial runtime results](CAPTURE-TEST-RESULTS.md),
+and [the version 1.1 investigation](RUNTIME-FIX.md).
 
 ## Build
 
@@ -68,21 +78,22 @@ Requires matching kernel headers, DKMS, build tools, and the appropriate compile
 The tested compiler was `x86_64-linux-gnu-gcc-13`.
 
 **Keep the repository and `/usr/src` source unpatched.** DKMS applies
-`patches/USBLive2_Empia.patch` during source preparation. A direct `make` on
+`patches/USBLive2_Empia.patch`, then
+`patches/0002-e1-standard-query.patch` during source preparation. A direct `make` on
 unpatched source does not include E1 support.
 
 To build through DKMS, first copy this source into
-`/usr/src/em28xx-dkms-1.0`, backing up any existing directory. Include the
+`/usr/src/em28xx-dkms-1.1`, backing up any existing directory. Include the
 Makefile, `dkms.conf`, `em28xx/` and `patches/` directories.
 
 For a fresh registration:
 
 ```bash
-sudo dkms add -m em28xx-dkms -v 1.0
-sudo dkms build -m em28xx-dkms -v 1.0 -k "$(uname -r)"
+sudo dkms add -m em28xx-dkms -v 1.1
+sudo dkms build -m em28xx-dkms -v 1.1 -k "$(uname -r)"
 ```
 
-If `em28xx-dkms/1.0` is already registered, inspect `dkms status` and its source
+If `em28xx-dkms/1.1` is already registered, inspect `dkms status` and its source
 link first; do not add it again or replace an installed build blindly.
 
 Builds passed MODPOST against the running kernel's symbol versions. Missing
@@ -95,7 +106,7 @@ previous source, and close capture applications first. Do not unload shared
 USB audio, webcam or NVIDIA drivers.
 
 ```bash
-sudo dkms install -m em28xx-dkms -v 1.0 -k "$(uname -r)"
+sudo dkms install -m em28xx-dkms -v 1.1 -k "$(uname -r)"
 modinfo -n em28xx
 sudo modprobe em28xx
 sudo modprobe em28xx-v4l
@@ -132,8 +143,8 @@ paths. S-Video needs separate red/white audio cables.
 These are starting settings, not a claim of successful end-to-end capture.
 Audio currently fails direct ALSA recording, including with video streaming.
 It must be investigated with a playing source before OBS audio can be marked
-working. Standard readback also returned all standard bits in separate calls;
-automatic standard detection remains unvalidated.
+working. Standard autodetection is deliberately unsupported by version 1.1;
+select the actual NTSC/PAL standard explicitly.
 
 [OBS video capture documentation](https://obsproject.com/kb/video-capture-sources)
 
@@ -150,7 +161,7 @@ automatic standard detection remains unvalidated.
 Close capture applications, then uninstall only this package for the target kernel:
 
 ```bash
-sudo dkms uninstall -m em28xx-dkms -v 1.0 -k "$(uname -r)"
+sudo dkms uninstall -m em28xx-dkms -v 1.1 -k "$(uname -r)"
 ```
 
 If necessary, unload only unused em28xx modules in dependency order and restore
